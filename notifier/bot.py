@@ -17,8 +17,7 @@ async def check_user_access(user_id: int) -> bool:
     if user_id == ADMIN_ID:
         return True
     
-    current_hour = datetime.utcnow().hour # UTC time
-    active_users = await db.get_active_users(current_hour)
+    active_users = await db.get_active_users()
     return user_id in active_users
 
 async def build_gifts_keyboard():
@@ -71,20 +70,19 @@ async def cmd_grant(message: Message, command: CommandObject):
         return
         
     if not command.args:
-        await message.answer("Использование: /grant <user_id> <start_hour> <end_hour>\nПример: /grant 12345 10 18 (часы в UTC)")
+        await message.answer("Использование: /grant <user_id> <hours>\nПример: /grant 12345 2 (выдать доступ на 2 часа)")
         return
         
     parts = command.args.split()
-    if len(parts) != 3:
-        await message.answer("Ошибка: нужно 3 аргумента (user_id, start_hour, end_hour).")
+    if len(parts) != 2:
+        await message.answer("Ошибка: нужно 2 аргумента (user_id, hours).")
         return
         
     try:
         user_id = int(parts[0])
-        start_hour = int(parts[1])
-        end_hour = int(parts[2])
-        await db.grant_access(user_id, start_hour, end_hour)
-        await message.answer(f"✅ Доступ выдан пользователю {user_id} с {start_hour}:00 до {end_hour}:00 (UTC).")
+        hours = int(parts[1])
+        await db.grant_access(user_id, hours)
+        await message.answer(f"✅ Доступ выдан пользователю {user_id} на {hours} ч.")
     except ValueError:
         await message.answer("Ошибка: Аргументы должны быть числами.")
 
@@ -154,8 +152,7 @@ async def send_alert(message: str):
         logger.info(f"[Mock Alert] To Admin {ADMIN_ID}: {message}")
         return
         
-    current_hour = datetime.utcnow().hour
-    receivers = await db.get_active_users(current_hour)
+    receivers = await db.get_active_users()
     
     # Если есть пользователи с выданным доступом на этот час - отправляем только им.
     # Если список пуст (никто не арендует бота) - отправляем админу.

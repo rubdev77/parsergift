@@ -11,6 +11,7 @@ venv.bak/
 sessions/
 database/market.db
 *.session
+*.session-journal
 
 # Python
 __pycache__/

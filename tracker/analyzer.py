@@ -4,6 +4,7 @@ from userbot.manager import SessionManager
 from parser.sniffer import fetch_latest_market_items
 from notifier.bot import send_alert
 from config import LOTS_COUNT_TRIGGER, LOTS_TIME_WINDOW_MINUTES, MIN_GIFTS_TRIGGER, MIN_RATING_TRIGGER
+from state import AppState
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,11 @@ class MarketTracker:
                 return
             
             for item in items:
+                # If admin requested to stop parsing, abort processing the rest of items
+                if not AppState.is_running:
+                    logger.info("Parsing stopped by admin. Aborting current item list processing.")
+                    break
+                    
                 user_id = item['seller_id']
                 username = item.get('username', f'id{user_id}')
                 item_name = item['item_name']

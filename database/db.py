@@ -44,12 +44,14 @@ async def init_db():
             )
         ''')
 
-        # Create access control table
+        # Drop old access control table to migrate to new timestamp-based schema
+        await db.execute('DROP TABLE IF EXISTS access_control')
+        
+        # Create new access control table
         await db.execute('''
-            CREATE TABLE IF NOT EXISTS access_control (
+            CREATE TABLE access_control (
                 user_id BIGINT PRIMARY KEY,
-                start_hour INTEGER,
-                end_hour INTEGER
+                expires_at TIMESTAMP
             )
         ''')
         
@@ -118,32 +120,26 @@ async def remove_target_gift(gift_id: int):
 
 # --- Access Control Functions ---
 
-async def grant_access(user_id: int, start_hour: int, end_hour: int):
+async def grant_access(user_id: int, hours: int):
     async with pool.acquire() as db:
         await db.execute('''
-            INSERT INTO access_control (user_id, start_hour, end_hour)
-            VALUES ($1, $2, $3)
-            ON CONFLICT(user_id) DO UPDATE SET start_hour=EXCLUDED.start_hour, end_hour=EXCLUDED.end_hour
-        ''', user_id, start_hour, end_hour)
+            INSERT INTO access_control (user_id, expires_at)
+            VALUES ($1, NOW() + make_interval(hours => $2))
+            ON CONFLICT(user_id) DO UPDATE SET expires_at=EXCLUDED.expires_at
+        ''', user_id, hours)
 
 async def revoke_access(user_id: int):
     async with pool.acquire() as db:
         await db.execute('DELETE FROM access_control WHERE user_id = $1', user_id)
 
 async def get_access(user_id: int):
-    """Returns dict with start_hour and end_hour if user has access, else None."""
+    """Returns dict with expires_at if user has access, else None."""
     async with pool.acquire() as db:
-        row = await db.fetchrow('SELECT start_hour, end_hour FROM access_control WHERE user_id = $1', user_id)
+        row = await db.fetchrow('SELECT expires_at FROM access_control WHERE user_id = $1', user_id)
         return dict(row) if row else None
 
-async def get_active_users(current_hour: int):
-    """Returns a list of user_ids that are allowed at the given hour."""
+async def get_active_users():
+    """Returns a list of user_ids that currently have active access."""
     async with pool.acquire() as db:
-        rows = await db.fetch('''
-            SELECT user_id FROM access_control 
-            WHERE 
-                (start_hour <= end_hour AND start_hour <= $1 AND end_hour >= $1)
-                OR 
-                (start_hour > end_hour AND (start_hour <= $1 OR end_hour >= $1))
-        ''', current_hour)
+        rows = await db.fetch('SELECT user_id FROM access_control WHERE expires_at > NOW()')
         return [row['user_id'] for row in rows]
