@@ -1,0 +1,7 @@
+aiohttp
+aiosqlite
+pyrogram
+TgCrypto
+aiogram>=3.4.1
+python-dotenv
+asyncpg
