@@ -8,6 +8,8 @@ from userbot.manager import SessionManager
 from tracker.analyzer import MarketTracker
 from notifier.bot import close_bot
 from state import AppState
+import os
+from aiohttp import web
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,9 +19,32 @@ logging.getLogger("hydrogram.session.session").setLevel(logging.ERROR)
 logging.getLogger("hydrogram").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
 
+async def handle_ping(request):
+    return web.Response(text="Bot is running!")
+
+async def start_dummy_server():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    
+    # Render sets the PORT environment variable. Fallback to 8080 locally.
+    port = int(os.environ.get("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    logger.info(f"Dummy web server started on port {port} to satisfy Render health checks.")
+    return runner
+
 async def main():
     logger.info("Starting ParserGifts...")
     
+    # Start dummy server for Render
+    runner = None
+    try:
+        runner = await start_dummy_server()
+    except Exception as e:
+        logger.error(f"Failed to start dummy server: {e}")
+        
     # Initialize DB (which also copies TARGET_GIFT_IDS if empty)
     await db.init_db()
     
@@ -61,6 +86,8 @@ async def main():
             
         await session_manager.stop_all()
         await close_bot()
+        if runner:
+            await runner.cleanup()
         logger.info("Shutdown complete.")
 
 if __name__ == "__main__":
